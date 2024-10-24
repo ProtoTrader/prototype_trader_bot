@@ -1,5 +1,6 @@
 from gc import callbacks
 
+from telegram.constants import ParseMode
 from telegram.ext import (Application,
                           CommandHandler,
                           CallbackQueryHandler,
@@ -22,35 +23,60 @@ async def monitor(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         init_user_data(user_id, firstname)
     #TODO : crypto devra etre la chain de la crypto qui serra afficher en premier dans le primary trade, donc sell qui c retrouver en premier dans le monitor
     crypto = 'SOL' # pour l'instant je met SOL pour tester
-    await update.message.reply_text(monitor_menu_message(user_id), reply_markup=monitor_menu_keyboard(context, user_id, crypto))
+    await update.message.reply_text(
+        monitor_menu_message(user_id),
+        parse_mode = ParseMode.HTML,
+        reply_markup=monitor_menu_keyboard(context, user_id, crypto),
+        disable_web_page_preview=True
+    )
 
 async def monitor_original_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     user_id = query.from_user.id
     crypto = "SOL" # pour l'instant je met SOL pour tester
     await query.answer()
-    await query.edit_message_text(monitor_menu_message(user_id), reply_markup=monitor_menu_keyboard(context, user_id, crypto))
+    await query.edit_message_text(
+        monitor_menu_message(user_id),
+        parse_mode = ParseMode.HTML,
+        reply_markup=monitor_menu_keyboard(context, user_id, crypto),
+        disable_web_page_preview=True
+    )
 
 async def monitor_change_sell_low_value(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     user_id = query.from_user.id
     crypto = "SOL" # pour l'instant je met SOL pour tester
     await query.answer()
-    await query.edit_message_text(monitor_menu_message(user_id), reply_markup=monitor_menu_sell_low_symbol_keyboard(context, user_id, crypto))
+    await query.edit_message_text(
+        monitor_menu_message(user_id),
+        parse_mode = ParseMode.HTML,
+        reply_markup=monitor_menu_sell_low_symbol_keyboard(context, user_id, crypto),
+        disable_web_page_preview=True
+    )
 
 async def monitor_change_sell_high_value(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     user_id = query.from_user.id
     crypto = "SOL" # pour l'instant je met SOL pour tester
     await query.answer()
-    await query.edit_message_text(monitor_menu_message(user_id), reply_markup=monitor_menu_sell_high_symbol_keyboard(context, user_id, crypto))
+    await query.edit_message_text(
+        monitor_menu_message(user_id),
+        parse_mode=ParseMode.HTML,
+        reply_markup=monitor_menu_sell_high_symbol_keyboard(context, user_id, crypto),
+        disable_web_page_preview=True
+    )
 
 async def monitor_change_sell_amount(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     user_id = query.from_user.id
     crypto = "SOL" # pour l'instant je met SOL pour tester
     await query.answer()
-    await query.edit_message_text(monitor_menu_message(user_id), reply_markup=monitor_menu_sell_amount_keyboard(context, user_id, crypto))
+    await query.edit_message_text(
+        monitor_menu_message(user_id),
+        parse_mode=ParseMode.HTML,
+        reply_markup=monitor_menu_sell_amount_keyboard(context, user_id, crypto),
+        disable_web_page_preview=True
+    )
 
 async def monitor_activate_auto_sell(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
@@ -58,7 +84,12 @@ async def monitor_activate_auto_sell(update: Update, context: ContextTypes.DEFAU
     crypto = "SOL" # pour l'instant je met SOL pour tester
     await query.answer()
     user_data[user_id]['wallets'][crypto]['SELL']['bool']['AUTO_SELL']['value'] = not user_data[user_id]['wallets'][crypto]['SELL']['bool']['AUTO_SELL']['value']
-    await query.edit_message_text(monitor_menu_message(user_id), reply_markup=monitor_menu_keyboard(context, user_id, crypto))
+    await query.edit_message_text(
+        monitor_menu_message(user_id),
+        parse_mode=ParseMode.HTML,
+        reply_markup=monitor_menu_keyboard(context, user_id, crypto),
+        disable_web_page_preview=True
+    )
 
 async def monitor_activate_trailing(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
@@ -66,7 +97,12 @@ async def monitor_activate_trailing(update: Update, context: ContextTypes.DEFAUL
     crypto = "SOL" # pour l'instant je met SOL pour tester
     await query.answer()
     user_data[user_id]['wallets'][crypto]['SELL']['bool']['TRAILING']['value'] = not user_data[user_id]['wallets'][crypto]['SELL']['bool']['TRAILING']['value']
-    await query.edit_message_text(monitor_menu_message(user_id), reply_markup=monitor_menu_keyboard(context, user_id, crypto))
+    await query.edit_message_text(
+        monitor_menu_message(user_id),
+        parse_mode=ParseMode.HTML,
+        reply_markup=monitor_menu_keyboard(context, user_id, crypto),
+        disable_web_page_preview=True
+    )
 
 def monitor_menu_message(user_id) -> str:
     primary_text = primary_trade_text(user_id)
@@ -106,10 +142,20 @@ Time elapsed: 17h 23m 37s
 💸 Price impact: -0.03%
 🤑 Expected payout: 0.11 SOL
 
-🔧 DexT 📊 DexS 📈 DexV 👁 BirdEye"""
+""" + get_checker_token_text(user_id)
+
+def get_checker_token_text(user_id) -> str:
+    return (
+        "<a href='https://www.dextools.io/app/solana/pair-explorer'>🔧 DexT</a> "
+        "<a href='https://dexscreener.com/solana'>📊 DexS</a> "
+        "<a href='https://www.dexview.com/solana'>📈 DexV</a> "
+        "<a href='https://birdeye.so/token'>👁 BirdEye</a>"
+    )
 
 def other_trade_text(user_id) -> str:
-    return """🛍 Other Trades
+    return """
+    
+🛍 Other Trades
 (ex)/1 🪙 automated 🚀 -97.70% ⏱ 18:35
 
 ℹ Use ⬅ | ➡ to switch between multiple trades
