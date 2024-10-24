@@ -1,3 +1,5 @@
+from gc import callbacks
+
 from telegram.ext import (Application,
                           CommandHandler,
                           CallbackQueryHandler,
@@ -9,12 +11,17 @@ from telegram.ext import (Application,
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from button import button_bot_name
 from chain_menu import chain_menu
-from user_data import user_data
+from user_data import user_data, init_user_data
 
 
 async def monitor(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user_id = update.effective_user.id
-    crypto = update.callback_query.data.split('_')[-1]
+    print(user_data)
+    if user_data == {} :
+        firstname = update.effective_user.first_name
+        init_user_data(user_id, firstname)
+    #TODO : crypto devra etre la chain de la crypto qui serra afficher en premier dans le primary trade, donc sell qui c retrouver en premier dans le monitor
+    crypto = 'SOL' # pour l'instant je met SOL pour tester
     await update.message.reply_text(monitor_menu_message(user_id), reply_markup=monitor_menu_keyboard(context, user_id, crypto))
 
 def monitor_menu_message(user_id) -> str:
@@ -22,81 +29,106 @@ def monitor_menu_message(user_id) -> str:
     other_text = other_trade_text(user_id)
     return primary_text + other_text
 
+
+# 📌 Primary Trade
+# 💳 Main
+# 🪙 $VIORA (https://t.me/maestro?start=BhbfgSh5P742DE5eMx24iZXNZeD2vNRFBZe3EP9Mpump-cl_mentg) 🚀 +107.52% ⏱ 35:41
+# Initial: 0.05 SOL
+# Worth: 0.103 SOL
+# Time elapsed: 17h 33m 35s
+#
+# 💵 Price: $0.0012 | MC: $1.2m
+# 💸 Price impact: -0.03%
+# 🤑 Expected payout: 0.1 SOL
+#
+# 🔧 DexT (https://www.dextools.io/app/solana/pair-explorer/GxUArM1uQg9ZEghuxn9Uc66h7Bv1J7vWkTUHr9jD8sHU) 📊 DexS (https://dexscreener.com/solana/GxUArM1uQg9ZEghuxn9Uc66h7Bv1J7vWkTUHr9jD8sHU) 📈 DexV (https://www.dexview.com/solana/BhbfgSh5P742DE5eMx24iZXNZeD2vNRFBZe3EP9Mpump) 👁 BirdEye (https://birdeye.so/token/BhbfgSh5P742DE5eMx24iZXNZeD2vNRFBZe3EP9Mpump?chain=solana)
+#
+# 🛍 Other Trades
+# /1 🪙 automated 🚀 -97.70% ⏱ 18:27
+#
+# ℹ Sell-Lo/Hi compare against the coin's P/L, not its P/L w/tax
+#
+# 📢 Ad: Shill and get paid? No way. (https://x.com/MaestroBots/status/1844061260272250881)
+
 def primary_trade_text(user_id) -> str:
     return """📌 Primary Trade
 💳 Main
-(ex)🪙 $GINNAN 🚀 -0.87% ⏱ 33:51
+(ex)🪙 $VIORA 🚀 +123.03% ⏱ 35:51
 Initial: 0.05 SOL
-Worth: 0.0495 SOL
-Time elapsed: 2h 8m 49s
+Worth: 0.111SOL
+Time elapsed: 17h 23m 37s
 
-💵 Price: $0.00000218 | MC: $15.05m
-💸 Price impact: -0.00%
-🤑 Expected payout: 0.049 SOL
+💵 Price: $0.00128| MC: $1.29m
+💸 Price impact: -0.03%
+🤑 Expected payout: 0.11 SOL
 
 🔧 DexT 📊 DexS 📈 DexV 👁 BirdEye"""
 
 def other_trade_text(user_id) -> str:
     return """🛍 Other Trades
-(ex)/1 🪙 NIGGA 🚀 -3.64% ⏱ 21:08
+(ex)/1 🪙 automated 🚀 -97.70% ⏱ 18:35
 
 ℹ Use ⬅ | ➡ to switch between multiple trades
 
  📢 Ad: Shill and get paid? No way."""
 
 def monitor_menu_keyboard(context: ContextTypes.DEFAULT_TYPE, user_id, crypto) -> InlineKeyboardMarkup:
+    # TODO: for each conv, change the value only for the crypto currently displayed in the primary trade of the monitor
     keyboard = [
         button_bot_name(),
-        [InlineKeyboardButton("←", "previous_coin_" + crypto), InlineKeyboardButton("🔃 Ginnan", "refresh_actual_coin_" + crypto),InlineKeyboardButton("→", "next_coin_" + crypto)],
-        [InlineKeyboardButton("←", "previous_coin_" + crypto),InlineKeyboardButton("←", "previous_coin_" + crypto),InlineKeyboardButton("←", "previous_coin_" + crypto)]
+        [InlineKeyboardButton("←", callback_data="previous_coin_" + crypto),
+         InlineKeyboardButton("🔃 Viora", callback_data="refresh_actual_coin_" + crypto),
+         InlineKeyboardButton("→", callback_data="next_coin_" + crypto)],
+        [InlineKeyboardButton(get_sell_low_text(user_id, crypto), callback_data="menu_change_sell_low_value_" + crypto),
+         InlineKeyboardButton("Lo | Hi", callback_data="change_menu_sell_to_amount_" + crypto),
+         InlineKeyboardButton(get_sell_high_text(user_id, crypto), callback_data="menu_change_sell_high_value_" + crypto)],
+        [InlineKeyboardButton("X Buy Dip", callback_data="activate_buy_dip_monitor_" + crypto),
+         InlineKeyboardButton("0.01 SOL", callback_data="cv_change_value_buy_dip_" + crypto),
+         InlineKeyboardButton("Threshold", callback_data="menu_threshold_monitor_" + crypto)],
+        [InlineKeyboardButton("X Auto-Sell", callback_data="activate_auto_sell_monitor_" + crypto),
+         InlineKeyboardButton("X Trailing", callback_data="activate_trailing_monitor_" + crypto)],
+        [InlineKeyboardButton("Sell <=> BUY", callback_data="menu_change_sell_buy_" + crypto),
+         InlineKeyboardButton("PnL Card Buy", callback_data="create_pnl_card_buy_" + crypto)],
+        [InlineKeyboardButton(get_slippage_text(user_id, crypto), callback_data="cv_change_slippage_" + crypto),
+         InlineKeyboardButton(get_gas_delta_text(user_id, crypto), callback_data="cv_change_gas_delta_" + crypto)],
+        [InlineKeyboardButton("Sell Initials", callback_data="sell_initials_amount_" + crypto),
+         InlineKeyboardButton("Nuke Sell", callback_data="nuke_sell_" + crypto),
+         InlineKeyboardButton("Sell X %", callback_data="cv_sell_x_pourcentage_" + crypto)],
+        [InlineKeyboardButton("25% o Sell", callback_data="sell_x_pourcentage_first_button_" + crypto),
+         InlineKeyboardButton("50%", callback_data="sell_x_pourcentage_second_button_" + crypto),
+         InlineKeyboardButton("75%", callback_data="sell_x_pourcentage_third_button_" + crypto),
+         InlineKeyboardButton("100%", callback_data="sell_x_pourcentage_fourth_button_" + crypto)],
+        [InlineKeyboardButton("Sell X SOL", callback_data="cv_sell_x_sol_" + crypto),
+         InlineKeyboardButton("Sell X Tokens", callback_data="cv_sell_x_tokens_" + crypto)],
+        [InlineKeyboardButton("Reset", callback_data="reset_monitor_" + crypto),
+         InlineKeyboardButton("Refresh", callback_data="refresh_monitor_" + crypto),
+         InlineKeyboardButton("Stop", callback_data="stop_monitor_" + crypto),
+         InlineKeyboardButton("Delete", callback_data="delete_monitor_" + crypto)]
     ]
     return InlineKeyboardMarkup(keyboard)
 
-
-def get_low_sl_text(context: ContextTypes.DEFAULT_TYPE, user_id, crypto) -> str :
+def get_sell_low_text(user_id, crypto) -> str :
     #TODO : si cela vien d'un copy trade mettre les valeur a celle parametrer dans les parametres du trader copier
-    data = user_data[user_id][crypto]['SELL']['SELL_LOW']
-    text = data['value'] + data['symbol']
+    data = user_data[user_id]['wallets'][crypto]['SELL']['int']['SELL_LOW']
+    text = str(data['value']) + data['symbol']
     return text
 
-#Maestro Sniper Bot
-#
-# -60%
-#
-# X Buy Dip
-#
-# V Auto-Sell
-#
-# Sell • GINNAN
-#
-# • Lo | Hi •
-#
-# 0.01 SOL -
-#
-# +1000%
-#
-# Threshold
-#
-# X Trailing
-#
-# PnL Card Buy
-#
-# Slippage: 30%
-#
-# Sell Initials
-#
-# 25% o Sell
-#
-# 50%
-#
-# Sell X SOL
-#
-# Reset Refresh • Gas Delta: 0.001 sol
-#
-# Sell X %
-#
-# 75% 100%
-#
-# Sell X Tokens
-#
-# Stop X Delete
+def get_sell_high_text(user_id, crypto) -> str :
+    # TODO : si cela vien d'un copy trade mettre les valeur a celle parametrer dans les parametres du trader copier
+    data = user_data[user_id]['wallets'][crypto]['SELL']['int']['SELL_HIGH']
+    text = str(data['value']) + data['symbol']
+    return text
+
+def get_slippage_text(user_id, crypto) -> str :
+    # TODO : si cela vien d'un copy trade mettre les valeur a celle parametrer dans les parametres du trader copier
+    data = user_data[user_id]['wallets'][crypto]['SELL']['int']['SLIPPAGE']
+    text = "Slippage : " + str(data['value'])  + data['symbol']
+    return text
+
+def get_gas_delta_text(user_id, crypto) -> str :
+    # TODO : si cela vien d'un copy trade mettre les valeur a celle parametrer dans les parametres du trader copier
+    data = user_data[user_id]['wallets'][crypto]['SELL']['int']['GAS_DELTA']
+    text = "$Gas Delta " + str(data['value']) + " " + crypto
+    return text
+
+#TODO : function that return the text for the four button of the sell x pourcentage because they can be edited to change the value of the sell x pourcentage
