@@ -132,7 +132,7 @@ if __name__ == '__main__':
     application.add_handler(CallbackQueryHandler(monitor_change_sell_amount, pattern='change_menu_sell_to_amount_.*'))
     application.add_handler(CallbackQueryHandler(monitor_activate_auto_sell, pattern='activate_auto_sell_monitor_.*'))
     application.add_handler(CallbackQueryHandler(monitor_activate_trailing, pattern='activate_trailing_monitor_.*'))
-
+    application.add_handler(CallbackQueryHandler(monitor_menu_change_sell_buy, pattern='monitor_menu_change_sell_buy_.*'))
 
     conv_handler_ct_wallet = ConversationHandler(
         entry_points=[CallbackQueryHandler(add_wallet_ct, pattern='add_ct_wallet_.*')],

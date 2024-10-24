@@ -14,6 +14,15 @@ from button import button_bot_name
 from chain_menu import chain_menu
 from user_data import user_data, init_user_data
 
+last_menu = None
+
+info_message = {
+    "0" : "ℹ️ Sell-Lo/Hi compare against the coin's P/L, not its P/L w/tax",
+    "1" : "ℹ️ Click on the 🔃 trade symbol below to manually refresh the monitor",
+    "2" : "ℹ️ Use ⬅️ | ➡️ to switch between multiple trades",
+    "3" : "ℹ️ To remove a disabled trade, navigate to it and press ❌ Delete",
+    "actual" : 0
+}
 
 async def monitor(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user_id = update.effective_user.id
@@ -23,6 +32,7 @@ async def monitor(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         init_user_data(user_id, firstname)
     #TODO : crypto devra etre la chain de la crypto qui serra afficher en premier dans le primary trade, donc sell qui c retrouver en premier dans le monitor
     crypto = 'SOL' # pour l'instant je met SOL pour tester
+    set_last_menu_id("monitor_original_menu")
     await update.message.reply_text(
         monitor_menu_message(user_id),
         parse_mode = ParseMode.HTML,
@@ -35,6 +45,7 @@ async def monitor_original_menu(update: Update, context: ContextTypes.DEFAULT_TY
     user_id = query.from_user.id
     crypto = "SOL" # pour l'instant je met SOL pour tester
     await query.answer()
+    set_last_menu_id("monitor_original_menu")
     await query.edit_message_text(
         monitor_menu_message(user_id),
         parse_mode = ParseMode.HTML,
@@ -47,6 +58,7 @@ async def monitor_change_sell_low_value(update: Update, context: ContextTypes.DE
     user_id = query.from_user.id
     crypto = "SOL" # pour l'instant je met SOL pour tester
     await query.answer()
+    set_last_menu_id("monitor_change_sell_low_value_"+crypto)
     await query.edit_message_text(
         monitor_menu_message(user_id),
         parse_mode = ParseMode.HTML,
@@ -59,6 +71,7 @@ async def monitor_change_sell_high_value(update: Update, context: ContextTypes.D
     user_id = query.from_user.id
     crypto = "SOL" # pour l'instant je met SOL pour tester
     await query.answer()
+    set_last_menu_id("monitor_change_sell_high_value_"+crypto)
     await query.edit_message_text(
         monitor_menu_message(user_id),
         parse_mode=ParseMode.HTML,
@@ -71,6 +84,7 @@ async def monitor_change_sell_amount(update: Update, context: ContextTypes.DEFAU
     user_id = query.from_user.id
     crypto = "SOL" # pour l'instant je met SOL pour tester
     await query.answer()
+    set_last_menu_id("change_menu_sell_to_amount_"+crypto)
     await query.edit_message_text(
         monitor_menu_message(user_id),
         parse_mode=ParseMode.HTML,
@@ -83,6 +97,7 @@ async def monitor_activate_auto_sell(update: Update, context: ContextTypes.DEFAU
     user_id = query.from_user.id
     crypto = "SOL" # pour l'instant je met SOL pour tester
     await query.answer()
+    set_last_menu_id("monitor_original_menu")
     user_data[user_id]['wallets'][crypto]['SELL']['bool']['AUTO_SELL']['value'] = not user_data[user_id]['wallets'][crypto]['SELL']['bool']['AUTO_SELL']['value']
     await query.edit_message_text(
         monitor_menu_message(user_id),
@@ -96,6 +111,7 @@ async def monitor_activate_trailing(update: Update, context: ContextTypes.DEFAUL
     user_id = query.from_user.id
     crypto = "SOL" # pour l'instant je met SOL pour tester
     await query.answer()
+    set_last_menu_id("monitor_original_menu")
     user_data[user_id]['wallets'][crypto]['SELL']['bool']['TRAILING']['value'] = not user_data[user_id]['wallets'][crypto]['SELL']['bool']['TRAILING']['value']
     await query.edit_message_text(
         monitor_menu_message(user_id),
@@ -103,6 +119,23 @@ async def monitor_activate_trailing(update: Update, context: ContextTypes.DEFAUL
         reply_markup=monitor_menu_keyboard(context, user_id, crypto),
         disable_web_page_preview=True
     )
+
+async def monitor_menu_change_sell_buy(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    user_id = query.from_user.id
+    crypto = "SOL" # pour l'instant je met SOL pour tester
+    await query.answer()
+    set_last_menu_id("monitor_menu_change_sell_buy_"+crypto)
+    await query.edit_message_text(
+        monitor_menu_message(user_id),
+        parse_mode=ParseMode.HTML,
+        reply_markup=monitor_buy_menu_keyboard(context, user_id, crypto),
+        disable_web_page_preview=True
+    )
+
+def set_last_menu_id(menu_name):
+    global last_menu_id
+    last_menu_id = menu_name
 
 def monitor_menu_message(user_id) -> str:
     primary_text = primary_trade_text(user_id)
@@ -158,9 +191,20 @@ def other_trade_text(user_id) -> str:
 🛍 Other Trades
 (ex)/1 🪙 automated 🚀 -97.70% ⏱ 18:35
 
-ℹ Use ⬅ | ➡ to switch between multiple trades
+""" + get_next_info() + """
 
  📢 Ad: Shill and get paid? No way."""
+
+def get_next_info() -> str:
+    print(info_message["actual"])
+    text = info_message[str(info_message["actual"])]
+    if info_message["actual"] == 3:
+        info_message["actual"] = 0
+    else:
+        info_message["actual"] += 1
+    return text
+
+
 
 def monitor_menu_keyboard(context: ContextTypes.DEFAULT_TYPE, user_id, crypto) -> InlineKeyboardMarkup:
     # TODO: for each conv, change the value only for the crypto currently displayed in the primary trade of the monitor
@@ -177,7 +221,7 @@ def monitor_menu_keyboard(context: ContextTypes.DEFAULT_TYPE, user_id, crypto) -
          InlineKeyboardButton("Threshold", callback_data="menu_threshold_monitor_" + crypto)],
         [InlineKeyboardButton(get_booloean_button_text(user_id,crypto,"AUTO_SELL"), callback_data="activate_auto_sell_monitor_" + crypto),
          InlineKeyboardButton(get_booloean_button_text(user_id,crypto,"TRAILING"), callback_data="activate_trailing_monitor_" + crypto)],
-        [InlineKeyboardButton("Sell <=> BUY", callback_data="menu_change_sell_buy_" + crypto),
+        [InlineKeyboardButton("Sell <=> BUY", callback_data="monitor_menu_change_sell_buy_" + crypto),
          InlineKeyboardButton("PnL Card Buy", callback_data="create_pnl_card_buy_" + crypto)],
         [InlineKeyboardButton(get_slippage_text(user_id, crypto), callback_data="cv_change_slippage_" + crypto),
          InlineKeyboardButton(get_gas_delta_text(user_id, crypto), callback_data="cv_change_gas_delta_" + crypto)],
@@ -191,7 +235,7 @@ def monitor_menu_keyboard(context: ContextTypes.DEFAULT_TYPE, user_id, crypto) -
         [InlineKeyboardButton("Sell X SOL", callback_data="cv_sell_x_sol_" + crypto),
          InlineKeyboardButton("Sell X Tokens", callback_data="cv_sell_x_tokens_" + crypto)],
         [InlineKeyboardButton("Reset", callback_data="reset_monitor_" + crypto),
-         InlineKeyboardButton("Refresh", callback_data="refresh_monitor_" + crypto),
+         InlineKeyboardButton("Refresh", callback_data=get_callback_from_last_menu_id()),
          InlineKeyboardButton("Stop", callback_data="stop_monitor_" + crypto),
          InlineKeyboardButton("Delete", callback_data="delete_monitor_" + crypto)]
     ]
@@ -212,7 +256,7 @@ def monitor_menu_sell_low_symbol_keyboard(context: ContextTypes.DEFAULT_TYPE, us
          InlineKeyboardButton("Threshold", callback_data="menu_threshold_monitor_" + crypto)],
         [InlineKeyboardButton(get_booloean_button_text(user_id,crypto,"AUTO_SELL"), callback_data="activate_auto_sell_monitor_" + crypto),
          InlineKeyboardButton(get_booloean_button_text(user_id,crypto,"TRAILING"), callback_data="activate_trailing_monitor_" + crypto)],
-        [InlineKeyboardButton("Sell <=> BUY", callback_data="menu_change_sell_buy_" + crypto),
+        [InlineKeyboardButton("Sell <=> BUY", callback_data="monitor_menu_change_sell_buy_" + crypto),
          InlineKeyboardButton("PnL Card Buy", callback_data="create_pnl_card_buy_" + crypto)],
         [InlineKeyboardButton(get_slippage_text(user_id, crypto), callback_data="cv_change_slippage_" + crypto),
          InlineKeyboardButton(get_gas_delta_text(user_id, crypto), callback_data="cv_change_gas_delta_" + crypto)],
@@ -226,7 +270,7 @@ def monitor_menu_sell_low_symbol_keyboard(context: ContextTypes.DEFAULT_TYPE, us
         [InlineKeyboardButton("Sell X SOL", callback_data="cv_sell_x_sol_" + crypto),
          InlineKeyboardButton("Sell X Tokens", callback_data="cv_sell_x_tokens_" + crypto)],
         [InlineKeyboardButton("Reset", callback_data="reset_monitor_" + crypto),
-         InlineKeyboardButton("Refresh", callback_data="refresh_monitor_" + crypto),
+         InlineKeyboardButton("Refresh", callback_data=get_callback_from_last_menu_id()),
          InlineKeyboardButton("Stop", callback_data="stop_monitor_" + crypto),
          InlineKeyboardButton("Delete", callback_data="delete_monitor_" + crypto)]
     ]
@@ -247,7 +291,7 @@ def monitor_menu_sell_high_symbol_keyboard(context: ContextTypes.DEFAULT_TYPE, u
          InlineKeyboardButton("Threshold", callback_data="menu_threshold_monitor_" + crypto)],
         [InlineKeyboardButton(get_booloean_button_text(user_id,crypto,"AUTO_SELL"), callback_data="activate_auto_sell_monitor_" + crypto),
          InlineKeyboardButton(get_booloean_button_text(user_id,crypto,"TRAILING"), callback_data="activate_trailing_monitor_" + crypto)],
-        [InlineKeyboardButton("Sell <=> BUY", callback_data="menu_change_sell_buy_" + crypto),
+        [InlineKeyboardButton("Sell <=> BUY", callback_data="monitor_menu_change_sell_buy_" + crypto),
          InlineKeyboardButton("PnL Card Buy", callback_data="create_pnl_card_buy_" + crypto)],
         [InlineKeyboardButton(get_slippage_text(user_id, crypto), callback_data="cv_change_slippage_" + crypto),
          InlineKeyboardButton(get_gas_delta_text(user_id, crypto), callback_data="cv_change_gas_delta_" + crypto)],
@@ -261,7 +305,7 @@ def monitor_menu_sell_high_symbol_keyboard(context: ContextTypes.DEFAULT_TYPE, u
         [InlineKeyboardButton("Sell X SOL", callback_data="cv_sell_x_sol_" + crypto),
          InlineKeyboardButton("Sell X Tokens", callback_data="cv_sell_x_tokens_" + crypto)],
         [InlineKeyboardButton("Reset", callback_data="reset_monitor_" + crypto),
-         InlineKeyboardButton("Refresh", callback_data="refresh_monitor_" + crypto),
+         InlineKeyboardButton("Refresh", callback_data=get_callback_from_last_menu_id()),
          InlineKeyboardButton("Stop", callback_data="stop_monitor_" + crypto),
          InlineKeyboardButton("Delete", callback_data="delete_monitor_" + crypto)]
     ]
@@ -281,7 +325,7 @@ def monitor_menu_sell_amount_keyboard(context: ContextTypes.DEFAULT_TYPE, user_i
          InlineKeyboardButton("Threshold", callback_data="menu_threshold_monitor_" + crypto)],
         [InlineKeyboardButton(get_booloean_button_text(user_id,crypto,"AUTO_SELL"), callback_data="activate_auto_sell_monitor_" + crypto),
          InlineKeyboardButton(get_booloean_button_text(user_id,crypto,"TRAILING"), callback_data="activate_trailing_monitor_" + crypto)],
-        [InlineKeyboardButton("Sell <=> BUY", callback_data="menu_change_sell_buy_" + crypto),
+        [InlineKeyboardButton("Sell <=> BUY", callback_data="monitor_menu_change_sell_buy_" + crypto),
          InlineKeyboardButton("PnL Card Buy", callback_data="create_pnl_card_buy_" + crypto)],
         [InlineKeyboardButton(get_slippage_text(user_id, crypto), callback_data="cv_change_slippage_" + crypto),
          InlineKeyboardButton(get_gas_delta_text(user_id, crypto), callback_data="cv_change_gas_delta_" + crypto)],
@@ -295,11 +339,49 @@ def monitor_menu_sell_amount_keyboard(context: ContextTypes.DEFAULT_TYPE, user_i
         [InlineKeyboardButton("Sell X SOL", callback_data="cv_sell_x_sol_" + crypto),
          InlineKeyboardButton("Sell X Tokens", callback_data="cv_sell_x_tokens_" + crypto)],
         [InlineKeyboardButton("Reset", callback_data="reset_monitor_" + crypto),
-         InlineKeyboardButton("Refresh", callback_data="refresh_monitor_" + crypto),
+         InlineKeyboardButton("Refresh", callback_data=get_callback_from_last_menu_id()),
          InlineKeyboardButton("Stop", callback_data="stop_monitor_" + crypto),
          InlineKeyboardButton("X Delete", callback_data="delete_monitor_" + crypto)]
     ]
     return InlineKeyboardMarkup(keyboard)
+
+def monitor_buy_menu_keyboard(context: ContextTypes.DEFAULT_TYPE, user_id, crypto) -> InlineKeyboardMarkup:
+    keyboard = [
+        button_bot_name(),
+        [InlineKeyboardButton("←", callback_data="previous_coin_" + crypto),
+         InlineKeyboardButton("🔃 Viora", callback_data="refresh_actual_coin_" + crypto),
+         InlineKeyboardButton("→", callback_data="next_coin_" + crypto)],
+        [InlineKeyboardButton(get_sell_low_text(user_id, crypto), callback_data="monitor_change_sell_low_value_" + crypto),
+         InlineKeyboardButton("Lo | Hi", callback_data="change_menu_sell_to_amount_" + crypto),
+         InlineKeyboardButton(get_sell_high_text(user_id, crypto), callback_data="monitor_change_sell_high_value_" + crypto)],
+        [InlineKeyboardButton("X Buy Dip", callback_data="activate_buy_dip_monitor_" + crypto),
+         InlineKeyboardButton("0.01 SOL", callback_data="cv_change_value_buy_dip_" + crypto),
+         InlineKeyboardButton("Threshold", callback_data="menu_threshold_monitor_" + crypto)],
+        [InlineKeyboardButton(get_booloean_button_text(user_id,crypto,"AUTO_SELL"), callback_data="activate_auto_sell_monitor_" + crypto),
+         InlineKeyboardButton(get_booloean_button_text(user_id,crypto,"TRAILING"), callback_data="activate_trailing_monitor_" + crypto)],
+        [InlineKeyboardButton("Sell <=> BUY", callback_data="monitor_original_menu"),
+         InlineKeyboardButton("PnL Card Buy", callback_data="create_pnl_card_buy_" + crypto)],
+        [InlineKeyboardButton(get_slippage_text(user_id, crypto), callback_data="cv_change_slippage_" + crypto),
+         InlineKeyboardButton(get_gas_delta_text(user_id, crypto), callback_data="cv_change_gas_delta_" + crypto)],
+        [InlineKeyboardButton("Buy 0.01 SOL", callback_data="monitor_buy_0.01_" + crypto),
+         InlineKeyboardButton("Buy 0.05 SOL", callback_data="monitor_buy_0.05_" + crypto)],
+        [InlineKeyboardButton("Buy 0.1 SOL", callback_data="monitor_buy_0.1_" + crypto),
+         InlineKeyboardButton("Buy 0.2 SOL", callback_data="monitor_buy_0.2_" + crypto)],
+        [InlineKeyboardButton("Buy 0.5 SOL", callback_data="monitor_buy_0.5_" + crypto),
+         InlineKeyboardButton("Buy 1 SOL", callback_data="monitor_buy_1_" + crypto)],
+        [InlineKeyboardButton("Buy X SOL", callback_data="cv_monitor_buy_x_" + crypto),
+         InlineKeyboardButton("Buy X Tokens", callback_data="cv_monitor_buy_x_tokens_" + crypto)],
+        [InlineKeyboardButton("Reset", callback_data="reset_monitor_" + crypto),
+         InlineKeyboardButton("Refresh", callback_data=get_callback_from_last_menu_id()),
+         InlineKeyboardButton("Stop", callback_data="stop_monitor_" + crypto),
+         InlineKeyboardButton("Delete", callback_data="delete_monitor_" + crypto)]
+    ]
+    return InlineKeyboardMarkup(keyboard)
+
+def get_callback_from_last_menu_id() -> str:
+    return last_menu_id
+
+
 
 def get_booloean_button_text(user_id, crypto, bool_name) -> str :
     #TODO : pas pour buy dip car specifique a chaque token, pareil pour delete
