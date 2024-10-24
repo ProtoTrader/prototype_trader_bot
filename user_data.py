@@ -126,7 +126,7 @@ def init_user_data(user_id,first_name):
                         'text': "Auto Sell",
                         'name': "Auto Sell : "
                     },
-                    'TRAILING_SELL': {
+                    'TRAILING': {
                         'value': False,
                         'text': "Trailing Sell",
                         'name': "Trailing Sell : "
@@ -152,6 +152,12 @@ def init_user_data(user_id,first_name):
                     },
                     'SELL_HIGH_AMOUNT': {
                         'value': 50,
+                        'text': "Sell High Amount",
+                        'name': "Sell High Amount : ",
+                        'symbol': "%"
+                    },
+                    'SELL_LOW_AMOUNT': {
+                        'value': 100,
                         'text': "Sell High Amount",
                         'name': "Sell High Amount : ",
                         'symbol': "%"
@@ -262,7 +268,7 @@ def init_user_data(user_id,first_name):
                         'text': "Auto Sell",
                         'name': "Auto Sell : "
                     },
-                    'TRAILING_SELL': {
+                    'TRAILING': {
                         'value': False,
                         'text': "Trailing Sell",
                         'name': "Trailing Sell : "
@@ -288,6 +294,12 @@ def init_user_data(user_id,first_name):
                     },
                     'SELL_HIGH_AMOUNT': {
                         'value': 50,
+                        'text': "Sell High Amount",
+                        'name': "Sell High Amount : ",
+                        'symbol': "%"
+                    },
+                    'SELL_LOW_AMOUNT': {
+                        'value': 100,
                         'text': "Sell High Amount",
                         'name': "Sell High Amount : ",
                         'symbol': "%"
@@ -399,7 +411,7 @@ def init_user_data(user_id,first_name):
                         'text': "Auto Sell",
                         'name': "Auto Sell : "
                     },
-                    'TRAILING_SELL': {
+                    'TRAILING': {
                         'value': False,
                         'text': "Trailing Sell",
                         'name': "Trailing Sell : "

@@ -126,6 +126,13 @@ if __name__ == '__main__':
     application.add_handler(CallbackQueryHandler(show_faq_text, pattern='faq_.*'))
     application.add_handler(CallbackQueryHandler(faq, pattern='faq'))
 
+    application.add_handler(CallbackQueryHandler(monitor_original_menu, pattern='monitor_original_menu'))
+    application.add_handler(CallbackQueryHandler(monitor_change_sell_low_value, pattern='monitor_change_sell_low_value_.*'))
+    application.add_handler(CallbackQueryHandler(monitor_change_sell_high_value, pattern='monitor_change_sell_high_value_.*'))
+    application.add_handler(CallbackQueryHandler(monitor_change_sell_amount, pattern='change_menu_sell_to_amount_.*'))
+    application.add_handler(CallbackQueryHandler(monitor_activate_auto_sell, pattern='activate_auto_sell_monitor_.*'))
+    application.add_handler(CallbackQueryHandler(monitor_activate_trailing, pattern='activate_trailing_monitor_.*'))
+
 
     conv_handler_ct_wallet = ConversationHandler(
         entry_points=[CallbackQueryHandler(add_wallet_ct, pattern='add_ct_wallet_.*')],
