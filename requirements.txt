@@ -29,6 +29,15 @@ pytz==2024.1
 # Security
 cryptography==42.0.2
 pycryptodome==3.20.0
+keyring==24.3.0
+
+# Caching and queuing
+redis==5.0.1
+aioredis==2.0.1
+
+# Charting
+matplotlib==3.8.2
+plotly==5.18.0
 
 # Development tools (optional)
 pytest==8.0.0

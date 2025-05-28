@@ -86,3 +86,59 @@ pip install -r requirements.txt
 - Trading engine runs async monitoring tasks for stop loss/take profit
 - DEX integrations are placeholders - implement actual swap contracts
 - Consider implementing proper database (PostgreSQL/MongoDB) for production
+
+## Redis Integration and Performance Optimization
+
+### Redis Caching
+- **cache/redis_cache.py**: Provides caching layer for frequently accessed data
+- Caches token prices (30s TTL), liquidity data (5m), gas prices (30s), user sessions (1h)
+- Implements rate limiting for fee transactions and API calls
+- Decorator `@cached(expire=seconds)` for automatic function result caching
+
+### Task Queues
+- **queues/task_queue.py**: Implements priority-based task queues
+- Three specialized queues: TradingQueue, NotificationQueue, AnalyticsQueue
+- Supports task priorities: URGENT, HIGH, NORMAL, LOW
+- Automatic retry with exponential backoff
+- Worker pool configuration per queue type
+
+### Background Tasks
+- **background_tasks.py**: Manages periodic background operations
+- Price updates every 10 seconds for active tokens
+- Arbitrage scanning every 30 seconds
+- Position monitoring for stop loss/take profit
+- Analytics processing every hour
+- Cache cleanup hourly
+
+### Performance Monitoring
+- **monitoring/performance_monitor.py**: Tracks system performance metrics
+- Records trade execution times, API latencies, cache hit rates
+- Queue size monitoring
+- Error tracking by component
+- Metrics stored in Redis with 24h retention
+
+### Redis Configuration
+- **redis_config.py**: Central configuration for Redis settings
+- Configurable TTLs, rate limits, and key patterns
+- Queue worker counts and retry settings
+- Redis connection pooling for efficiency
+
+### Setup Requirements
+```bash
+# Install Redis server
+sudo apt-get install redis-server
+
+# Start Redis
+redis-server
+
+# Install Python dependencies
+pip install redis aioredis
+```
+
+### Environment Variables
+```
+REDIS_HOST=localhost
+REDIS_PORT=6379
+REDIS_DB=0
+REDIS_PASSWORD=your_password_if_needed
+```

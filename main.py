@@ -1,6 +1,7 @@
 import os
 import json
 import asyncio
+import logging
 
 from dotenv import load_dotenv
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
@@ -30,6 +31,15 @@ from trading_commands import (
 )
 from chart_commands import show_price_chart, show_portfolio_chart
 from copy_trading_engine import copy_trading_engine
+from trading_engine import trading_engine
+from background_tasks import background_manager
+from cache.redis_cache import RedisCache
+
+# Configure logging
+logging.basicConfig(
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    level=logging.INFO
+)
 
 load_dotenv()
 
@@ -529,6 +539,31 @@ def get_user_data():
     return user_data
 
 
+async def initialize_services():
+    """Initialize all background services"""
+    logger = logging.getLogger(__name__)
+    
+    try:
+        # Initialize Redis connection
+        cache = RedisCache()
+        logger.info("Redis cache initialized")
+        
+        # Start trading engine queue processing
+        await trading_engine.start_queue_processing()
+        logger.info("Trading engine queue started")
+        
+        # Start background task manager
+        await background_manager.start()
+        logger.info("Background task manager started")
+        
+        # Start copy trading engine
+        await copy_trading_engine.start()
+        logger.info("Copy trading engine started")
+        
+    except Exception as e:
+        logger.error(f"Failed to initialize services: {e}")
+        raise
+
 if __name__ == '__main__':
     # Replace 'YOUR_TOKEN_HERE' with your bot's token
     TOKEN = os.getenv('TOKEN')
@@ -759,8 +794,24 @@ if __name__ == '__main__':
     # Error handler
     application.add_error_handler(error)
 
-    # Start copy trading engine
-    asyncio.create_task(copy_trading_engine.start())
+    # Initialize services when bot starts
+    async def post_init(application: Application) -> None:
+        await initialize_services()
+    
+    application.post_init = post_init
+    
+    # Shutdown handler
+    async def post_shutdown(application: Application) -> None:
+        logger = logging.getLogger(__name__)
+        logger.info("Shutting down services...")
+        
+        # Stop background services
+        await background_manager.stop()
+        await copy_trading_engine.stop()
+        
+        logger.info("Services stopped")
+    
+    application.post_shutdown = post_shutdown
 
     # Start polling
     application.run_polling(1)

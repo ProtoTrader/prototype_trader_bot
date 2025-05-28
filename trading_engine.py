@@ -15,6 +15,8 @@ from config import FEE_PERCENTAGE, FEE_WALLETS, DEX_ROUTERS, WRAPPED_TOKENS, RPC
 from dex.uniswap import UniswapTrader
 from dex.raydium import RaydiumTrader
 from security.honeypot_scanner import scan_token_security
+from cache.redis_cache import RedisCache, cached
+from queues.task_queue import TradingQueue, TaskPriority
 
 logger = logging.getLogger(__name__)
 
@@ -25,16 +27,38 @@ class TradingEngine:
     def __init__(self):
         self.active_trades = {}
         self.price_monitors = {}
+        self.cache = RedisCache()
+        self.trading_queue = TradingQueue(self.cache)
         self.web3_clients = {
             'ETH': Web3(Web3.HTTPProvider('https://eth.llamarpc.com')),
             'BSC': Web3(Web3.HTTPProvider('https://bsc-dataseed.binance.org/'))
         }
         self.solana_client = AsyncClient("https://api.mainnet-beta.solana.com")
         
+    async def start_queue_processing(self):
+        """Start the trading queue workers"""
+        await self.trading_queue.start(num_workers=5)
+        
     async def buy_token(self, user_id: int, chain: str, token_address: str, 
                        amount: float, slippage: float = 10.0, gas_delta: float = 0.001, 
-                       skip_security_check: bool = False) -> Dict:
+                       skip_security_check: bool = False, use_queue: bool = True) -> Dict:
         """Execute a buy order with fee deduction and security checks"""
+        # Queue the task if requested
+        if use_queue:
+            task_id = await self.trading_queue.enqueue(
+                'buy_token',
+                {
+                    'wallet_address': user_id,  # Will be resolved in handler
+                    'chain': chain,
+                    'token_address': token_address,
+                    'amount': amount,
+                    'slippage': slippage,
+                    'user_id': user_id
+                },
+                priority=TaskPriority.HIGH
+            )
+            return {'success': True, 'task_id': task_id, 'queued': True}
+            
         try:
             # Security check first (unless explicitly skipped)
             if not skip_security_check and chain in ['ETH', 'BSC']:
@@ -218,10 +242,23 @@ class TradingEngine:
                 logger.error(f"Error monitoring trade {trade_id}: {e}")
                 await asyncio.sleep(10)
     
+    @cached(expire=30)  # Cache for 30 seconds
     async def _get_token_price(self, chain: str, token_address: str) -> Optional[float]:
-        """Get current token price"""
-        # This is a placeholder - implement actual price fetching
-        # You would integrate with DEX APIs like Uniswap, PancakeSwap, Raydium, etc.
+        """Get current token price with caching"""
+        # Check cache first
+        cached_price = self.cache.get_price(chain, token_address)
+        if cached_price is not None:
+            return cached_price
+            
+        # Fetch from DEX if not cached
+        price = await self._fetch_price_from_dex(chain, token_address)
+        if price:
+            self.cache.set_price(chain, token_address, price, expire=30)
+        return price
+        
+    async def _fetch_price_from_dex(self, chain: str, token_address: str) -> Optional[float]:
+        """Fetch price from DEX"""
+        # This is still a placeholder - would integrate with actual DEX APIs
         return 1.0
     
     def _get_user_wallet(self, user_id: int, chain: str) -> Optional[Dict]:
@@ -254,29 +291,53 @@ class TradingEngine:
         return str(uuid.uuid4())
     
     async def _send_fee(self, wallet: Dict, chain: str, fee_amount: float) -> Optional[str]:
-        """Send fee to project wallet"""
+        """Send fee to project wallet with caching"""
         try:
             fee_wallet = FEE_WALLETS.get(chain)
             if not fee_wallet:
                 logger.error(f"No fee wallet configured for {chain}")
                 return None
             
-            if chain == 'ETH':
-                return await self._send_eth_fee(wallet, fee_wallet, fee_amount)
-            elif chain == 'SOL':
-                return await self._send_sol_fee(wallet, fee_wallet, fee_amount)
-            elif chain == 'TRX':
-                return await self._send_trx_fee(wallet, fee_wallet, fee_amount)
-            else:
+            # Check if we recently sent a fee (rate limiting)
+            rate_key = f"fee_rate:{wallet['address']}:{chain}"
+            if not self.cache.check_rate_limit(rate_key, 10):  # Max 10 fees per minute
+                logger.warning("Fee rate limit exceeded")
                 return None
+                
+            tx_hash = None
+            if chain == 'ETH':
+                tx_hash = await self._send_eth_fee(wallet, fee_wallet, fee_amount)
+            elif chain == 'SOL':
+                tx_hash = await self._send_sol_fee(wallet, fee_wallet, fee_amount)
+            elif chain == 'TRX':
+                tx_hash = await self._send_trx_fee(wallet, fee_wallet, fee_amount)
+                
+            if tx_hash:
+                self.cache.increment_rate_limit(rate_key)
+                # Cache transaction for quick lookup
+                self.cache.cache_transaction(tx_hash, {
+                    'type': 'fee',
+                    'chain': chain,
+                    'amount': fee_amount,
+                    'from': wallet['address'],
+                    'to': fee_wallet
+                })
+                
+            return tx_hash
         except Exception as e:
             logger.error(f"Failed to send fee: {e}")
             return None
     
     async def _buy_eth_token(self, wallet: Dict, token_address: str, amount: float, 
                             slippage: float, gas_delta: float) -> str:
-        """Execute buy on Ethereum/BSC using Uniswap"""
+        """Execute buy on Ethereum/BSC using Uniswap with gas price caching"""
         try:
+            # Get cached gas price or fetch new one
+            gas_price = self.cache.get_gas_price('ETH')
+            if not gas_price:
+                gas_price = await self._fetch_gas_price('ETH')
+                self.cache.set_gas_price('ETH', gas_price, expire=30)
+                
             # Initialize Uniswap trader
             web3_client = self.web3_clients['ETH']
             uniswap = UniswapTrader(
@@ -296,6 +357,14 @@ class TradingEngine:
             )
             
             if result['success']:
+                # Cache successful transaction
+                self.cache.cache_transaction(result['tx_hash'], {
+                    'type': 'buy',
+                    'chain': 'ETH',
+                    'token': token_address,
+                    'amount': amount,
+                    'wallet': wallet['address']
+                })
                 return result['tx_hash']
             else:
                 raise Exception(result['error'])
@@ -303,6 +372,12 @@ class TradingEngine:
         except Exception as e:
             logger.error(f"ETH buy failed: {e}")
             raise
+            
+    async def _fetch_gas_price(self, chain: str) -> int:
+        """Fetch current gas price"""
+        if chain in self.web3_clients:
+            return self.web3_clients[chain].eth.gas_price
+        return 20000000000  # Default 20 gwei
     
     async def _sell_eth_token(self, wallet: Dict, token_address: str, amount: float,
                              slippage: float, gas_delta: float) -> str:
@@ -360,15 +435,42 @@ class TradingEngine:
         return "T" + "0" * 33
     
     def get_active_trades(self, user_id: int) -> List[Dict]:
-        """Get all active trades for a user"""
-        return [
+        """Get all active trades for a user with caching"""
+        # Check cache first
+        cache_key = f"active_trades:{user_id}"
+        cached_trades = self.cache.get(cache_key)
+        if cached_trades is not None:
+            return cached_trades
+            
+        # Get from memory if not cached
+        trades = [
             trade for trade_id, trade in self.active_trades.items()
             if trade['user_id'] == user_id
         ]
+        
+        # Cache for quick access
+        self.cache.set(cache_key, trades, expire=10)
+        return trades
     
     def get_trade_status(self, trade_id: str) -> Optional[Dict]:
         """Get status of a specific trade"""
-        return self.active_trades.get(trade_id)
+        # Check cache first
+        cached_trade = self.cache.get(f"trade:{trade_id}")
+        if cached_trade:
+            return cached_trade
+            
+        trade = self.active_trades.get(trade_id)
+        if trade:
+            self.cache.set(f"trade:{trade_id}", trade, expire=60)
+        return trade
+        
+    async def get_queue_stats(self) -> Dict[str, Any]:
+        """Get trading queue statistics"""
+        return {
+            'queue_stats': self.trading_queue.get_queue_stats(),
+            'active_trades': len(self.active_trades),
+            'monitored_trades': len(self.price_monitors)
+        }
 
 
 # Singleton instance
