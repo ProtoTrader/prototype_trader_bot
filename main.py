@@ -1,5 +1,6 @@
 import os
 import json
+import asyncio
 
 from dotenv import load_dotenv
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
@@ -27,6 +28,8 @@ from trading_commands import (
     receive_amount, confirm_trade, cancel_trade,
     AWAITING_TOKEN_ADDRESS, AWAITING_AMOUNT, AWAITING_CONFIRMATION
 )
+from chart_commands import show_price_chart, show_portfolio_chart
+from copy_trading_engine import copy_trading_engine
 
 load_dotenv()
 
@@ -749,8 +752,15 @@ if __name__ == '__main__':
     application.add_handler(CallbackQueryHandler(monitor_navigate, pattern='monitor_refresh'))
     application.add_handler(CallbackQueryHandler(quick_sell, pattern='quick_sell_.*'))
     
+    # Chart handlers
+    application.add_handler(CallbackQueryHandler(show_price_chart, pattern='show_chart_.*'))
+    application.add_handler(CallbackQueryHandler(show_portfolio_chart, pattern='portfolio_chart'))
+    
     # Error handler
     application.add_error_handler(error)
+
+    # Start copy trading engine
+    asyncio.create_task(copy_trading_engine.start())
 
     # Start polling
     application.run_polling(1)

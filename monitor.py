@@ -92,7 +92,11 @@ def monitor_keyboard(user_id: int, crypto: str, current_index: int, total_trades
     ])
     
     keyboard.append([
-        InlineKeyboardButton("⚙️ Manage SL/TP", callback_data=f"manage_sl_tp_{crypto}"),
+        InlineKeyboardButton("📊 Chart", callback_data=f"show_chart_{crypto}_24h"),
+        InlineKeyboardButton("⚙️ SL/TP", callback_data=f"manage_sl_tp_{crypto}")
+    ])
+    
+    keyboard.append([
         InlineKeyboardButton("🔙 Main Menu", callback_data="main")
     ])
     

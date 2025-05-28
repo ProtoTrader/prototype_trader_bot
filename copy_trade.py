@@ -9,6 +9,7 @@ from telegram.ext import (Application,
                           )
 from button import *
 from user_data import user_data, message_ids, reply_message_conv, delete_conv
+from copy_trading_engine import copy_trading_engine
 import re
 import json
 
@@ -191,6 +192,10 @@ async def receive_wallet_name(update: Update, context: ContextTypes.DEFAULT_TYPE
             }
             wallets_ct.append(to_input)
             user_data[user_id]['wallets'][wallet_type]['GENERAL']['WALLETS_CT']['value'] = wallets_ct
+            
+            # Add wallet to copy trading engine monitoring
+            copy_trading_engine.add_wallet_to_monitor(wallet_type, wallet_address, user_id)
+            
             text = f"Wallet '{wallet_name}' with address '{wallet_address}' added successfully to Copy Trade!"
             await reply_message_conv(update, user_id, text)
 

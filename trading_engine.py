@@ -11,6 +11,10 @@ import aiohttp
 from web3 import Web3
 from solana.rpc.async_api import AsyncClient
 from wallet_manager import wallet_manager
+from config import FEE_PERCENTAGE, FEE_WALLETS, DEX_ROUTERS, WRAPPED_TOKENS, RPC_ENDPOINTS
+from dex.uniswap import UniswapTrader
+from dex.raydium import RaydiumTrader
+from security.honeypot_scanner import scan_token_security
 
 logger = logging.getLogger(__name__)
 
@@ -28,21 +32,43 @@ class TradingEngine:
         self.solana_client = AsyncClient("https://api.mainnet-beta.solana.com")
         
     async def buy_token(self, user_id: int, chain: str, token_address: str, 
-                       amount: float, slippage: float = 10.0, gas_delta: float = 0.001) -> Dict:
-        """Execute a buy order"""
+                       amount: float, slippage: float = 10.0, gas_delta: float = 0.001, 
+                       skip_security_check: bool = False) -> Dict:
+        """Execute a buy order with fee deduction and security checks"""
         try:
+            # Security check first (unless explicitly skipped)
+            if not skip_security_check and chain in ['ETH', 'BSC']:
+                security_result = await scan_token_security(chain, token_address)
+                if security_result['is_honeypot']:
+                    return {
+                        'success': False, 
+                        'error': f"Token failed security check: {', '.join(security_result['warnings'])}",
+                        'security_result': security_result
+                    }
+                elif security_result['risk_level'] in ['HIGH', 'CRITICAL']:
+                    logger.warning(f"High risk token detected: {token_address}")
+            
             # Get user's wallet
             wallet = self._get_user_wallet(user_id, chain)
             if not wallet:
                 return {'success': False, 'error': 'No wallet connected'}
             
+            # Calculate fee amount (1% of trade)
+            fee_amount = amount * FEE_PERCENTAGE
+            actual_trade_amount = amount - fee_amount
+            
+            # Send fee to project wallet first
+            fee_tx = await self._send_fee(wallet, chain, fee_amount)
+            if not fee_tx:
+                return {'success': False, 'error': 'Failed to process fee transaction'}
+            
             # Prepare transaction based on chain
             if chain == 'ETH':
-                tx_hash = await self._buy_eth_token(wallet, token_address, amount, slippage, gas_delta)
+                tx_hash = await self._buy_eth_token(wallet, token_address, actual_trade_amount, slippage, gas_delta)
             elif chain == 'SOL':
-                tx_hash = await self._buy_sol_token(wallet, token_address, amount, slippage)
+                tx_hash = await self._buy_sol_token(wallet, token_address, actual_trade_amount, slippage)
             elif chain == 'TRX':
-                tx_hash = await self._buy_trx_token(wallet, token_address, amount, slippage)
+                tx_hash = await self._buy_trx_token(wallet, token_address, actual_trade_amount, slippage)
             else:
                 return {'success': False, 'error': f'Unsupported chain: {chain}'}
             
@@ -227,12 +253,56 @@ class TradingEngine:
         import uuid
         return str(uuid.uuid4())
     
+    async def _send_fee(self, wallet: Dict, chain: str, fee_amount: float) -> Optional[str]:
+        """Send fee to project wallet"""
+        try:
+            fee_wallet = FEE_WALLETS.get(chain)
+            if not fee_wallet:
+                logger.error(f"No fee wallet configured for {chain}")
+                return None
+            
+            if chain == 'ETH':
+                return await self._send_eth_fee(wallet, fee_wallet, fee_amount)
+            elif chain == 'SOL':
+                return await self._send_sol_fee(wallet, fee_wallet, fee_amount)
+            elif chain == 'TRX':
+                return await self._send_trx_fee(wallet, fee_wallet, fee_amount)
+            else:
+                return None
+        except Exception as e:
+            logger.error(f"Failed to send fee: {e}")
+            return None
+    
     async def _buy_eth_token(self, wallet: Dict, token_address: str, amount: float, 
                             slippage: float, gas_delta: float) -> str:
-        """Execute buy on Ethereum/BSC"""
-        # Placeholder - implement actual DEX interaction
-        # This would use Uniswap/PancakeSwap Router contracts
-        return "0x" + "0" * 64
+        """Execute buy on Ethereum/BSC using Uniswap"""
+        try:
+            # Initialize Uniswap trader
+            web3_client = self.web3_clients['ETH']
+            uniswap = UniswapTrader(
+                web3_client,
+                DEX_ROUTERS['ETH']['UNISWAP_V2'],
+                WRAPPED_TOKENS['ETH']
+            )
+            
+            # Execute buy
+            result = await uniswap.buy_token(
+                wallet['address'],
+                wallet['private_key'],
+                token_address,
+                amount,
+                slippage,
+                gas_delta * 1000  # Convert to gwei
+            )
+            
+            if result['success']:
+                return result['tx_hash']
+            else:
+                raise Exception(result['error'])
+                
+        except Exception as e:
+            logger.error(f"ETH buy failed: {e}")
+            raise
     
     async def _sell_eth_token(self, wallet: Dict, token_address: str, amount: float,
                              slippage: float, gas_delta: float) -> str:
@@ -242,9 +312,34 @@ class TradingEngine:
     
     async def _buy_sol_token(self, wallet: Dict, token_address: str, amount: float,
                             slippage: float) -> str:
-        """Execute buy on Solana"""
-        # Placeholder - implement actual DEX interaction (Raydium, Orca, etc.)
-        return "1" * 88
+        """Execute buy on Solana using Raydium"""
+        try:
+            # Create keypair from private key
+            import base58
+            from solana.keypair import Keypair
+            
+            secret_key = base58.b58decode(wallet['private_key'])
+            keypair = Keypair.from_seed(secret_key[:32])
+            
+            # Initialize Raydium trader
+            raydium = RaydiumTrader(self.solana_client)
+            
+            # Execute buy
+            result = await raydium.buy_token(
+                keypair,
+                token_address,
+                amount,
+                slippage
+            )
+            
+            if result['success']:
+                return result['tx_hash']
+            else:
+                raise Exception(result['error'])
+                
+        except Exception as e:
+            logger.error(f"SOL buy failed: {e}")
+            raise
     
     async def _sell_sol_token(self, wallet: Dict, token_address: str, amount: float,
                              slippage: float) -> str:
