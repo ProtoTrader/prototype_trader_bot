@@ -1,0 +1,36 @@
+# Core dependencies
+python-telegram-bot==21.1
+python-dotenv==1.0.1
+
+# Blockchain and crypto trading
+web3==6.15.1
+ccxt==4.2.25
+eth-account==0.11.0
+solana==0.32.0
+tronpy==0.4.0
+
+# Data processing and analysis
+pandas==2.2.0
+numpy==1.26.3
+
+# API and networking
+aiohttp==3.9.3
+requests==2.31.0
+websockets==12.0
+
+# Database
+sqlalchemy==2.0.25
+pymongo==4.6.1
+
+# Utils
+python-dateutil==2.8.2
+pytz==2024.1
+
+# Security
+cryptography==42.0.2
+pycryptodome==3.20.0
+
+# Development tools (optional)
+pytest==8.0.0
+black==24.1.1
+flake8==7.0.0

@@ -12,8 +12,9 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 
 from button import *
 from user_data import user_data, message_ids, delete_conv, reply_message_conv
+from wallet_manager import wallet_manager
 
-AWAITING_CHANGE = range(1)
+AWAITING_CHANGE, AWAITING_WALLET = range(2)
 
 message_orginal = {}
 
@@ -35,6 +36,42 @@ async def menu_generate_wallet(update: Update, context: ContextTypes.DEFAULT_TYP
     print(context.user_data)
     message = "Generating wallet for " + cryptoChoosen + "..."
     await query.edit_message_text(message, reply_markup=generate_menu_wallet_keyboard(cryptoChoosen))
+
+
+# Generate new wallet
+async def generate_wallet(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    await query.answer()
+    crypto = query.data.split('_')[-1]
+    user_id = query.from_user.id
+    
+    try:
+        # Generate new wallet
+        wallet = wallet_manager.create_wallet(crypto)
+        
+        # Store wallet info for user (encrypted)
+        if 'generated_wallets' not in user_data[user_id]:
+            user_data[user_id]['generated_wallets'] = {}
+        
+        encrypted_key = wallet_manager.encrypt_private_key(wallet['private_key'])
+        user_data[user_id]['generated_wallets'][crypto] = {
+            'address': wallet['address'],
+            'private_key_encrypted': encrypted_key,
+            'chain': crypto
+        }
+        
+        # Format message with wallet details
+        message = f"✅ New {crypto} wallet generated!\n\n"
+        message += f"🔐 Address: `{wallet['address']}`\n\n"
+        message += f"🔑 Private Key: `{wallet['private_key']}`\n\n"
+        message += "⚠️ IMPORTANT: Save your private key securely! This is the only time it will be shown.\n"
+        message += "⚠️ Never share your private key with anyone!"
+        
+        await query.edit_message_text(message, parse_mode="Markdown", 
+                                      reply_markup=generate_menu_wallet_keyboard(crypto))
+    except Exception as e:
+        await query.edit_message_text(f"❌ Error generating wallet: {str(e)}", 
+                                      reply_markup=generate_menu_wallet_keyboard(crypto))
 
 
 # Generate Wallet from Wallet Menu
@@ -61,6 +98,62 @@ async def show_wallet(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     text = text_wallet_menu(cryptoChoosen, user_id)
     await query.edit_message_text(text, parse_mode="MarkdownV2",
                                   reply_markup=setting_wallet_keyboard(cryptoChoosen))
+
+
+# Connect Wallet (start the process)
+async def connect_wallet(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    query = update.callback_query
+    await query.answer()
+    crypto = query.data.split('_')[-1]
+    context.user_data['connecting_chain'] = crypto
+    
+    message = f"Please send your {crypto} wallet private key.\n\n"
+    message += "⚠️ Make sure to delete the message after sending for security!\n"
+    message += "Type /cancel to cancel."
+    
+    await query.edit_message_text(message)
+    return AWAITING_WALLET
+
+
+# Process wallet private key
+async def receive_wallet_key(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    user_id = update.effective_user.id
+    private_key = update.message.text.strip()
+    crypto = context.user_data.get('connecting_chain')
+    
+    # Delete user's message containing private key for security
+    try:
+        await update.message.delete()
+    except:
+        pass
+    
+    # Validate and import wallet
+    wallet = wallet_manager.import_wallet(crypto, private_key)
+    
+    if wallet:
+        # Store connected wallet
+        if 'connected_wallets' not in user_data[user_id]:
+            user_data[user_id]['connected_wallets'] = {}
+        
+        encrypted_key = wallet_manager.encrypt_private_key(wallet['private_key'])
+        user_data[user_id]['connected_wallets'][crypto] = {
+            'address': wallet['address'],
+            'private_key_encrypted': encrypted_key,
+            'chain': crypto
+        }
+        
+        message = f"✅ Wallet connected successfully!\n\n"
+        message += f"🔐 Address: `{wallet['address']}`\n"
+        message += f"🔗 Chain: {crypto}"
+        
+        await update.message.reply_text(message, parse_mode="Markdown",
+                                        reply_markup=generate_menu_wallet_keyboard(crypto))
+    else:
+        message = "❌ Invalid private key. Please try again or /cancel"
+        await update.message.reply_text(message)
+        return AWAITING_WALLET
+    
+    return ConversationHandler.END
 
 
 # Connect Wallet from Wallet Menu
@@ -916,7 +1009,20 @@ def generate_menu_wallet_keyboard(crypto) -> InlineKeyboardMarkup:
 
 
 def text_wallet_menu(crypto, user_id) -> str:
-    adresse = "Adresse : "  # + adresse de la wallet
+    # Check if user has a wallet for this chain
+    wallet_address = None
+    if 'generated_wallets' in user_data[user_id] and crypto in user_data[user_id]['generated_wallets']:
+        wallet_address = user_data[user_id]['generated_wallets'][crypto]['address']
+    elif 'connected_wallets' in user_data[user_id] and crypto in user_data[user_id]['connected_wallets']:
+        wallet_address = user_data[user_id]['connected_wallets'][crypto]['address']
+    
+    if wallet_address:
+        # Truncate address for display
+        display_address = f"{wallet_address[:6]}...{wallet_address[-4:]}"
+        adresse = f"Adresse : `{display_address}`"
+    else:
+        adresse = "Adresse : *Not connected*"
+    
     # mettre en majuscule et en  gras le text
     chain = "Chain : *" + crypto.upper() + "*"
     balance = "Balance : " + "* 0 " + crypto.upper() + "*"  # "*" + balance de la wallet + "*"
@@ -972,6 +1078,8 @@ def setting_wallet_keyboard(crypto: str) -> InlineKeyboardMarkup:
          InlineKeyboardButton("🔙 Return", callback_data='wallet')],
         [InlineKeyboardButton("Generate Wallet", callback_data='generate_from_wallet_' + crypto),
          InlineKeyboardButton("Multi-Wallet", callback_data='menu_multi_wallet_' + crypto)],
+        [InlineKeyboardButton("🛒 Buy", callback_data='start_buy_' + crypto),
+         InlineKeyboardButton("💰 Sell", callback_data='start_sell_' + crypto)],
         [InlineKeyboardButton("📤 " + crypto, callback_data='withdraw' + crypto),
          InlineKeyboardButton("📥 Tokens", callback_data='withdraw_token_' + crypto)],
         [InlineKeyboardButton("🔢 Buy KB", callback_data='buy_kb_' + crypto),

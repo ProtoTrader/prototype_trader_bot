@@ -1,13 +1,32 @@
 import os
+import json
 
 from dotenv import load_dotenv
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import (
+    Application,
+    CommandHandler,
+    CallbackQueryHandler,
+    ConversationHandler,
+    MessageHandler,
+    ContextTypes,
+    filters
+)
 
 from chain_menu import *
 from copy_trade import *
 from faq_menu import *
 from main_menu import *
 from wallets import *
+from wallets import AWAITING_WALLET, receive_wallet_key
 from monitor import *
+from monitor import monitor_navigate, quick_sell
+from user_data import user_data, message_ids
+from trading_commands import (
+    start_buy, start_sell, receive_token_address, 
+    receive_amount, confirm_trade, cancel_trade,
+    AWAITING_TOKEN_ADDRESS, AWAITING_AMOUNT, AWAITING_CONFIRMATION
+)
 
 load_dotenv()
 
@@ -520,7 +539,16 @@ if __name__ == '__main__':
     application.add_handler(CallbackQueryHandler(generate_wallet, pattern='generate_wallet_.*'))
     application.add_handler(CallbackQueryHandler(generate_from_wallet, pattern='generate_from_wallet_*'))
 
-    application.add_handler(CallbackQueryHandler(connect_wallet, pattern='connect_wallet_.*'))
+    # Connect wallet conversation handler
+    conv_handler_connect_wallet = ConversationHandler(
+        entry_points=[CallbackQueryHandler(connect_wallet, pattern='connect_wallet_.*')],
+        states={
+            AWAITING_WALLET: [MessageHandler(filters.TEXT & ~filters.COMMAND, receive_wallet_key)],
+        },
+        fallbacks=[CommandHandler('cancel', cancel)],
+    )
+    application.add_handler(conv_handler_connect_wallet)
+    
     application.add_handler(CallbackQueryHandler(connect_from_wallet, pattern='connect_from_wallet_.*'))
     application.add_handler(CallbackQueryHandler(disconnect_from_wallet, pattern='disconnect_from_wallet_.*'))
 
@@ -667,6 +695,36 @@ if __name__ == '__main__':
     application.add_handler(conv_handler_wallet_sell_high)
     application.add_handler(conv_handler_wallet_sell_high_amount)
     application.add_handler(conv_handler_wallet_sell_low_amount)
+    
+    # Trading conversation handlers
+    conv_handler_buy = ConversationHandler(
+        entry_points=[CallbackQueryHandler(start_buy, pattern='start_buy_.*')],
+        states={
+            AWAITING_TOKEN_ADDRESS: [MessageHandler(filters.TEXT & ~filters.COMMAND, receive_token_address)],
+            AWAITING_AMOUNT: [MessageHandler(filters.TEXT & ~filters.COMMAND, receive_amount)],
+            AWAITING_CONFIRMATION: [
+                CallbackQueryHandler(confirm_trade, pattern='confirm_trade'),
+                CallbackQueryHandler(confirm_trade, pattern='cancel_trade')
+            ],
+        },
+        fallbacks=[CommandHandler('cancel', cancel_trade)],
+    )
+    
+    conv_handler_sell = ConversationHandler(
+        entry_points=[CallbackQueryHandler(start_sell, pattern='start_sell_.*')],
+        states={
+            AWAITING_TOKEN_ADDRESS: [MessageHandler(filters.TEXT & ~filters.COMMAND, receive_token_address)],
+            AWAITING_AMOUNT: [MessageHandler(filters.TEXT & ~filters.COMMAND, receive_amount)],
+            AWAITING_CONFIRMATION: [
+                CallbackQueryHandler(confirm_trade, pattern='confirm_trade'),
+                CallbackQueryHandler(confirm_trade, pattern='cancel_trade')
+            ],
+        },
+        fallbacks=[CommandHandler('cancel', cancel_trade)],
+    )
+    
+    application.add_handler(conv_handler_buy)
+    application.add_handler(conv_handler_sell)
 
     application.add_handler(CallbackQueryHandler(erase_gas_delta_wallet, pattern='erase_gd_wallet_.*'))
     application.add_handler(CallbackQueryHandler(erase_min_mc_wallet, pattern='erase_min_mc_wallet_.*'))
@@ -684,6 +742,13 @@ if __name__ == '__main__':
     application.add_handler(CallbackQueryHandler(trailing_sell_wallet, pattern='trailing_sell_wallet_*'))
     application.add_handler(CallbackQueryHandler(auto_sell, pattern='auto_sell_wallet_*'))
     application.add_handler(CallbackQueryHandler(auto_sell_retry, pattern='auto_sell_retry_wallet_*'))
+    
+    # Monitor handlers
+    application.add_handler(CallbackQueryHandler(monitor_navigate, pattern='monitor_prev'))
+    application.add_handler(CallbackQueryHandler(monitor_navigate, pattern='monitor_next'))
+    application.add_handler(CallbackQueryHandler(monitor_navigate, pattern='monitor_refresh'))
+    application.add_handler(CallbackQueryHandler(quick_sell, pattern='quick_sell_.*'))
+    
     # Error handler
     application.add_error_handler(error)
 
